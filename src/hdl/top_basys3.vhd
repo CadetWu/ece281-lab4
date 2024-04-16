@@ -90,23 +90,77 @@ entity top_basys3 is
 end top_basys3;
 
 architecture top_basys3_arch of top_basys3 is 
-  
-	-- declare components and signals
 
-  
+component elevator_controller_fsm is
+        Port ( i_clk     : in  STD_LOGIC;
+               i_reset   : in  STD_LOGIC;
+               i_stop    : in  STD_LOGIC;
+               i_up_down : in  STD_LOGIC;
+               o_floor   : out STD_LOGIC_VECTOR (3 downto 0)           
+             );
+    end component elevator_controller_fsm;
+
+component sevenSegDecoder is
+      port(
+         i_D : in std_logic_vector (3 downto 0);
+         o_S : out std_logic_vector (6 downto 0)
+      );    
+    end component sevenSegDecoder;
+    
+component clock_divider is
+    generic ( constant k_DIV : natural := 25000000    );
+    port ( i_clk    : in std_logic;           -- basys3 clk
+            i_reset  : in std_logic;           -- asynchronous
+            o_clk    : out std_logic           -- divided (slow) clock
+        );
+    end component clock_divider;
+    
+    signal w_clk : std_logic;        
+    signal w_7SD_EN_n: std_logic;
+    signal w_elevator_fsm_reset: std_logic;
+    signal w_elevator_clock_reset: std_logic;
+    signal w_floor: std_logic_vector (3 downto 0);
 begin
 	-- PORT MAPS ----------------------------------------
+    clkdiv_inst : clock_divider         --instantiation of clock_divider to take 
+    generic map ( k_DIV => 50000000 ) -- 0.25 Hz clock from 100 MHz
+    port map (                          
+        i_clk   => clk,
+        i_reset => w_elevator_clock_reset,
+        o_clk   => w_clk
+    );  
 
-	
+	-- wire up active-low 7SD anode (active low) to button (active-high)
+	-- display 7SD 0 only when button pushed
+	-- other 7SD are kept off
+	-----------------------------------------------------
+    elevator_controller_fsm_inst : elevator_controller_fsm
+        port map(
+        i_clk => w_clk,
+        i_reset => w_elevator_fsm_reset,
+        i_stop => sw(0),
+        i_up_down => sw(1),
+        o_floor => w_floor
+    );
+    
+    sevenSegDecoder_inst : sevenSegDecoder port map (
+      -- use comma (not a semicolon)
+      -- no comma on last line
+      i_D => w_floor,
+      o_S => seg
+    );
 	
 	-- CONCURRENT STATEMENTS ----------------------------
-	
+	w_elevator_fsm_reset <= '1' when (btnR = '1' or btnU = '1') else '0';
+	w_elevator_clock_reset <= '1' when (btnL = '1' or btnU = '1') else '0';
 	-- LED 15 gets the FSM slow clock signal. The rest are grounded.
-	
-
+    led(15) <= w_clk;
 	-- leave unused switches UNCONNECTED. Ignore any warnings this causes.
 	
 	-- wire up active-low 7SD anodes (an) as required
 	-- Tie any unused anodes to power ('1') to keep them off
-	
+	an(0) <= '1';
+    an(1) <= '1';
+    an(2) <= '1';
+    an(3) <= '0';
 end top_basys3_arch;
